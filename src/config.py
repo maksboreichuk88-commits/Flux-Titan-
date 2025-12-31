@@ -58,14 +58,14 @@ class Config:
         Raises:
             ValueError: если отсутствуют обязательные переменные
         """
-        telegram_token = os.getenv("TG_TOKEN")
+        telegram_token = os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         channel_id = os.getenv("CHANNEL_ID")
         
         # Валидация обязательных переменных
         missing = []
         if not telegram_token:
-            missing.append("TG_TOKEN")
+            missing.append("TELEGRAM_BOT_TOKEN or TG_TOKEN")
         if not gemini_api_key:
             missing.append("GEMINI_API_KEY")
         if not channel_id:
