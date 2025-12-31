@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Taboo Світшот Half Zip Black",
+    "url": "https://tabooclothes.com.ua/product/half-zip-sweatshirt-black/",
+    "price_selectors": [
+      "meta[property='product:price:amount']",
+      "meta[itemprop='price']",
+      ".price",
+      ".product-price",
+      "[data-price]"
+    ],
+    "currency": "UAH"
+  }
+]

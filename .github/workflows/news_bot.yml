@@ -1,0 +1,146 @@
+# ============================================================================
+# GitHub Actions Workflow для Telegram News Bot
+# Запускается каждый час, парсит новости и публикует в Telegram
+# ============================================================================
+
+name: 📰 News Bot
+
+on:
+  # Запуск по расписанию (каждый час)
+  schedule:
+    - cron: '0 * * * *'  # Каждый час в :00 минут
+  
+  # Ручной запуск через UI
+  workflow_dispatch:
+    inputs:
+      max_articles:
+        description: 'Максимум статей за запуск'
+        required: false
+        default: '3'
+      debug:
+        description: 'Включить debug-логи'
+        required: false
+        default: 'false'
+
+  # Запуск при push в main (для тестирования)
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'main.py'
+      - 'requirements.txt'
+
+# Разрешаем запись в репозиторий (для коммита БД)
+permissions:
+  contents: write
+
+# Предотвращаем параллельные запуски
+concurrency:
+  group: news-bot
+  cancel-in-progress: false
+
+jobs:
+  run-bot:
+    name: 🤖 Run News Bot
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      # ========================================
+      # 1. ПОДГОТОВКА ОКРУЖЕНИЯ
+      # ========================================
+      
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Нужен токен для push
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Получаем историю для корректной работы git
+          fetch-depth: 0
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ========================================
+      # 2. ЗАПУСК БОТА
+      # ========================================
+      
+      - name: 🚀 Run News Bot
+        env:
+          # Секреты из GitHub Secrets
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          
+          # Опциональные настройки
+          MAX_ARTICLES_PER_RUN: ${{ github.event.inputs.max_articles || '5' }}
+          GEMINI_MODEL: 'gemini-1.5-flash'
+          DATABASE_PATH: 'processed.db'
+          
+          # Debug режим
+          PYTHONUNBUFFERED: '1'
+          LOG_LEVEL: ${{ github.event.inputs.debug == 'true' && 'DEBUG' || 'INFO' }}
+        run: |
+          echo "🕐 Время запуска: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "📊 Максимум статей: $MAX_ARTICLES_PER_RUN"
+          echo ""
+          python main.py
+
+      # ========================================
+      # 3. СОХРАНЕНИЕ БАЗЫ ДАННЫХ
+      # ========================================
+      
+      - name: 💾 Commit database changes
+        run: |
+          # Настраиваем git
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Проверяем, есть ли изменения в БД
+          if [ -f "processed.db" ]; then
+            git add processed.db
+            
+            # Проверяем, есть ли что коммитить
+            if git diff --staged --quiet; then
+              echo "📭 Нет изменений в базе данных"
+            else
+              # Получаем статистику
+              ARTICLE_COUNT=$(sqlite3 processed.db "SELECT COUNT(*) FROM processed_articles" 2>/dev/null || echo "0")
+              
+              git commit -m "🗄️ Update database: $ARTICLE_COUNT articles total [skip ci]"
+              git push
+              echo "✅ База данных обновлена"
+            fi
+          else
+            echo "⚠️ База данных не найдена"
+          fi
+
+      # ========================================
+      # 4. ОТЧЕТ О ВЫПОЛНЕНИИ
+      # ========================================
+      
+      - name: 📊 Generate summary
+        if: always()
+        run: |
+          echo "## 📰 News Bot Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Параметр | Значение |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🕐 Время | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| 📊 Статус | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "processed.db" ]; then
+            TOTAL=$(sqlite3 processed.db "SELECT COUNT(*) FROM processed_articles" 2>/dev/null || echo "N/A")
+            LAST_24H=$(sqlite3 processed.db "SELECT COUNT(*) FROM processed_articles WHERE processed_at > datetime('now', '-1 day')" 2>/dev/null || echo "N/A")
+            echo "| 🗄️ Всего в БД | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 📈 За 24 часа | $LAST_24H |" >> $GITHUB_STEP_SUMMARY
+          fi

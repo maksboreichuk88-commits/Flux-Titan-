@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: opus_sync_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint || true  # Don't fail on lint errors for now
+
+      - name: Run migrations
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: opus_sync_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+        run: npm run migrate
+
+      - name: Run tests
+        env:
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: opus_sync_test
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          S3_ENDPOINT: http://localhost:9000
+          S3_BUCKET: test-bucket
+          S3_ACCESS_KEY_ID: test
+          S3_SECRET_ACCESS_KEY: test
+        run: npm test
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t opus-sync:${{ github.sha }} .
+
+      - name: Test Docker image
+        run: |
+          docker run --rm opus-sync:${{ github.sha }} node --version

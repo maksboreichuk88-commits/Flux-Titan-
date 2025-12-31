@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  # Main application
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=opus_sync
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_BUCKET=opus-sync
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
+      - S3_FORCE_PATH_STYLE=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./src:/app/src:ro  # Hot reload in development
+    restart: unless-stopped
+
+  # Background worker for transcoding
+  worker:
+    build: .
+    command: node src/queue/worker.js
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=opus_sync
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_BUCKET=opus-sync
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
+      - S3_FORCE_PATH_STYLE=true
+      - WORKER_CONCURRENCY=2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    volumes:
+      - ./src:/app/src:ro
+    restart: unless-stopped
+
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=opus_sync
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations/001_create_leads.sql:/docker-entrypoint-initdb.d/001_create_leads.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for job queue
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO (S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Initialize MinIO bucket
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/opus-sync;
+      mc anonymous set download local/opus-sync;
+      exit 0;
+      "
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
