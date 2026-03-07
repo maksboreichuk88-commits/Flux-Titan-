@@ -31,7 +31,7 @@ Flux-Titan follows a pipeline architecture, coordinating data through specific, 
 
 ---
 
-## 🚀 Installation
+## Installation
 
 Ensure you have Python 3.11+ installed.
 

@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-03-07
 
-### Initial Release
-This marks the first official open-source release of Flux-Titan.
+### Initial Public OSS Release
+Flux-Titan is now packaged as a small open-source self-hosted RSS-to-Telegram automation toolkit.
+
+This is an early-stage public release focused on maintainability, reuse, and simple self-hosted deployment.
+
+### What's Included
+- reusable Python package structure
+- CLI entry point
+- GitHub Actions automation workflow
+- CI test workflow
+- contributor documentation
+- security policy
+- AGENTS.md instructions for coding agents
+- improved repository hygiene for OSS maintenance
+- support for OpenAI and Gemini summarizers
+- YAML-based feed configuration
+- Docker support
 
 ### Added
 - Standardized open-source repository structure (LICENSE, CONTRIBUTING, SECURITY)
