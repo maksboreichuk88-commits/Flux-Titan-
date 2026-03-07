@@ -6,8 +6,8 @@ Currently, only the latest release of Flux-Titan is supported with security upda
 
 | Version | Supported          |
 | ------- | ------------------ |
-| >= 3.x  | :white_check_mark: |
-| < 3.x   | :x:                |
+| >= 0.1.x | :white_check_mark: |
+| < 0.1.x  | :x:                |
 
 ## Reporting a Vulnerability
 
