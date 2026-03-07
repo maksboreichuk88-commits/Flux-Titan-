@@ -1,5 +1,8 @@
 # Flux-Titan
 
+> [!IMPORTANT]
+> **Flux-Titan is currently in an early-stage public release (v0.1.x).** It is a small personal automation tool and has not been widely adopted or battle-tested in large-scale production environments. Use with this in mind.
+
 > **A self-hosted RSS-to-Telegram automation toolkit with AI summarization.**
 
 Flux-Titan is a lightweight, customizable pipeline designed to monitor RSS feeds, summarize articles using AI (Google Gemini by default), extract header images, and publish the curated content directly to a Telegram channel.
