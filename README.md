@@ -68,7 +68,7 @@ cp .env.example .env
 *   `OPENAI_API_KEY`: Required if `AI_PROVIDER=openai`.
 
 ### Optional Variables
-*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-1.5-flash`).
+*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-2.5-flash`).
 *   `OPENAI_MODEL`: The OpenAI model to use (default: `gpt-4o-mini`).
 *   `MAX_ARTICLES_PER_RUN`: Number of new articles to process in a single execution (default: `5`).
 ### RSS Feeds Configuration
