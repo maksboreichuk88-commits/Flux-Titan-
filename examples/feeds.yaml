@@ -1,0 +1,19 @@
+# Flux-Titan RSS Feeds Configuration
+# Place this file in the project root or specify its path via FEEDS_CONFIG_PATH env variable.
+
+feeds:
+  - name: "Habr / Tech"
+    url: "https://habr.com/ru/rss/hub/technologies/all/"
+    icon: "💾"
+  
+  - name: "VC.ru"
+    url: "https://vc.ru/rss"
+    icon: "📈"
+  
+  - name: "3DNews"
+    url: "https://3dnews.ru/news/rss/"
+    icon: "🖥️"
+
+  - name: "TechCrunch"
+    url: "https://techcrunch.com/feed/"
+    icon: "🔶"

@@ -24,6 +24,7 @@ dependencies = [
     "aiohttp>=3.9",
     "httpx>=0.25",
     "openai>=1.0",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]

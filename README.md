@@ -71,9 +71,27 @@ cp .env.example .env
 *   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-1.5-flash`).
 *   `OPENAI_MODEL`: The OpenAI model to use (default: `gpt-4o-mini`).
 *   `MAX_ARTICLES_PER_RUN`: Number of new articles to process in a single execution (default: `5`).
-*   `DATABASE_PATH`: Path to the SQLite tracking database (default: `processed.db`).
-*   `CUSTOM_RSS_FEEDS`: A comma-separated list of feeds to monitor. Format: `Name|URL|Icon`. 
-    *   *Example:* `TechCrunch|https://techcrunch.com/feed/|🔶,TheVerge|https://www.theverge.com/rss/index.xml|🔷`
+### RSS Feeds Configuration
+
+You can manage your sources in two ways:
+
+#### 1. YAML File (Recommended)
+Create a `feeds.yaml` in the project root. Flux-Titan will automatically detect it:
+```yaml
+feeds:
+  - name: "Flux-Titan Dev"
+    url: "https://github.com/maksboreichuk88-commits/Flux-Titan-/commits/main.atom"
+    icon: "🚀"
+```
+*Specify a custom path via `FEEDS_CONFIG_PATH` if needed.*
+
+#### 2. Environment Variable
+Use `CUSTOM_RSS_FEEDS` for quick setups:
+```bash
+CUSTOM_RSS_FEEDS="Name1|URL1|Icon1,Name2|URL2|Icon2"
+```
+
+*Note: Sources from YAML and ENV are merged with the default feeds.*
 
 ---
 
