@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from flux_titan.summarizers.openai import OpenAISummarizer
 
 @pytest.fixture
@@ -42,3 +42,28 @@ def test_clean_response():
     input_text = "```html\n<b>Text</b>\n```"
     cleaned = OpenAISummarizer._clean_response(input_text)
     assert cleaned == "<b>Text</b>"
+
+
+@pytest.mark.asyncio
+async def test_openai_summarize_retries_on_temporary_error(openai_summarizer):
+    class TemporaryRateLimitError(Exception):
+        def __init__(self):
+            self.status_code = 429
+            super().__init__("rate limited")
+
+    mock_response = MagicMock()
+    mock_response.choices = [
+        MagicMock(message=MagicMock(content="<b>Retry Success</b>"))
+    ]
+
+    with patch.object(
+        openai_summarizer.client.chat.completions,
+        'create',
+        side_effect=[TemporaryRateLimitError(), mock_response],
+    ) as mock_create, patch('flux_titan.summarizers.openai.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+        article = {"title": "Test", "link": "http://link"}
+        result = await openai_summarizer.summarize(article)
+
+        assert result == "<b>Retry Success</b>"
+        assert mock_create.call_count == 2
+        mock_sleep.assert_called_once()

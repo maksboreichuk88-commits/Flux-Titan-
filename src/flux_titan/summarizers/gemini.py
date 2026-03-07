@@ -5,6 +5,7 @@ Converts news into "Business Insights" format.
 
 import asyncio
 import logging
+import time
 from typing import Optional, Dict, Any
 
 import google.generativeai as genai
@@ -21,6 +22,9 @@ class GeminiSummarizer(BaseSummarizer):
     Summarizes articles using Google Gemini API.
     Generates professional content for a Telegram channel.
     """
+
+    RETRY_ATTEMPTS = 3
+    RETRY_BASE_DELAY = 1.0
 
     SYSTEM_INSTRUCTION = """You are an editor of a technology and business Telegram news channel.
 Your task is to turn news into concise, informative, and engaging posts.
@@ -61,7 +65,7 @@ Write the post (HTML only, no explanations):"""
     def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
         """
         Gemini client initialization.
-        
+
         Args:
             api_key: Google AI API key
             model: Gemini model name
@@ -75,7 +79,7 @@ Write the post (HTML only, no explanations):"""
         """Gemini API configuration."""
         try:
             genai.configure(api_key=self.api_key)
-            
+
             # Safety settings (allow news content)
             safety_settings = {
                 HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
@@ -83,7 +87,7 @@ Write the post (HTML only, no explanations):"""
                 HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
                 HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
             }
-            
+
             # Generation parameters
             generation_config = GenerationConfig(
                 temperature=0.7,
@@ -91,59 +95,83 @@ Write the post (HTML only, no explanations):"""
                 top_k=40,
                 max_output_tokens=1024,
             )
-            
+
             self._model = genai.GenerativeModel(
                 model_name=self.model_name,
                 generation_config=generation_config,
                 safety_settings=safety_settings,
                 system_instruction=self.SYSTEM_INSTRUCTION,
             )
-            
+
             logger.info(f"Gemini model initialized: {self.model_name}")
-            
+
         except Exception as e:
             logger.error(f"Gemini initialization error: {e}")
             raise
 
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        """Retry only for transient API/network errors."""
+        return isinstance(
+            exc,
+            (
+                google_exceptions.ResourceExhausted,
+                google_exceptions.ServiceUnavailable,
+                google_exceptions.DeadlineExceeded,
+                google_exceptions.TooManyRequests,
+            ),
+        )
+
     def _generate_sync(self, prompt: str) -> Optional[str]:
         """
         Synchronous generation (for running in thread pool).
-        
+
         Args:
             prompt: prepared prompt
-            
+
         Returns:
             Generated text or None
         """
-        try:
-            response = self._model.generate_content(prompt)
-            
-            # Check if response is blocked
-            if not response.parts:
-                if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
-                    logger.warning(f"Gemini blocked the response: {response.prompt_feedback.block_reason}")
+        for attempt in range(1, self.RETRY_ATTEMPTS + 1):
+            try:
+                response = self._model.generate_content(prompt)
+
+                # Check if response is blocked
+                if not response.parts:
+                    if hasattr(response, 'prompt_feedback') and response.prompt_feedback.block_reason:
+                        logger.warning(f"Gemini blocked the response: {response.prompt_feedback.block_reason}")
+                    return None
+
+                return response.text
+
+            except google_exceptions.InvalidArgument as e:
+                logger.error(f"Gemini: invalid argument - {e}")
                 return None
-            
-            return response.text
-            
-        except google_exceptions.InvalidArgument as e:
-            logger.error(f"Gemini: invalid argument - {e}")
-        except google_exceptions.ResourceExhausted as e:
-            logger.error(f"Gemini: quota exceeded - {e}")
-        except google_exceptions.GoogleAPIError as e:
-            logger.error(f"Gemini API error: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected Gemini error: {e}")
-        
+            except google_exceptions.GoogleAPIError as e:
+                retryable = self._is_retryable_error(e)
+                if attempt >= self.RETRY_ATTEMPTS or not retryable:
+                    logger.error(f"Gemini API error: {e}")
+                    return None
+
+                delay = self.RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                logger.warning(
+                    f"Gemini temporary error (attempt {attempt}/{self.RETRY_ATTEMPTS}): {e}. "
+                    f"Retrying in {delay:.1f}s"
+                )
+                time.sleep(delay)
+            except Exception as e:
+                logger.error(f"Unexpected Gemini error: {e}")
+                return None
+
         return None
 
     async def summarize(self, article: Dict[str, Any]) -> Optional[str]:
         """
         Asynchronous article summarization.
-        
+
         Args:
             article: dictionary with article data
-            
+
         Returns:
             Prepared Telegram post or None
         """
@@ -156,17 +184,16 @@ Write the post (HTML only, no explanations):"""
                 content=article.get("content", article.get("summary", ""))[:1500],
                 link=article.get("link", ""),
             )
-            
+
             # Run synchronous Gemini in thread pool
             result = await asyncio.to_thread(self._generate_sync, prompt)
-            
+
             if result:
-                # Clean potential markdown artifacts
                 result = self._clean_response(result)
                 return result.strip()
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Summarization error: {e}")
             return None
@@ -175,9 +202,9 @@ Write the post (HTML only, no explanations):"""
     def _clean_response(text: str) -> str:
         """Clean markdown artifacts from the response."""
         import re
-        
+
         # Remove code blocks if present
         text = re.sub(r'^```html?\s*\n?', '', text, flags=re.MULTILINE)
         text = re.sub(r'\n?```\s*$', '', text, flags=re.MULTILINE)
-        
+
         return text.strip()

@@ -28,13 +28,21 @@ class Database:
             db_path: path to the database file
         """
         self.db_path = db_path
+        self._memory_conn = None
+
+        # Keep one persistent connection for in-memory SQLite so schema/data
+        # survive across method calls within a single bot run/test session.
+        if self.db_path == ":memory:":
+            self._memory_conn = sqlite3.connect(self.db_path)
+            self._memory_conn.row_factory = sqlite3.Row
+
         self._init_schema()
         logger.info(f"Database initialized: {db_path}")
 
     @contextmanager
     def _get_connection(self):
         """Context manager for DB connection."""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._memory_conn or sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
             yield conn
@@ -43,7 +51,17 @@ class Database:
             conn.rollback()
             raise
         finally:
-            conn.close()
+            if self._memory_conn is None:
+                conn.close()
+
+    def close(self) -> None:
+        """Close persistent in-memory connection if present."""
+        if self._memory_conn is not None:
+            self._memory_conn.close()
+            self._memory_conn = None
+
+    def __del__(self):
+        self.close()
 
     def _init_schema(self) -> None:
         """Database schema initialization."""

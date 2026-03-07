@@ -72,3 +72,19 @@ async def test_telegram_api_error(telegram_poster):
         result = await telegram_poster.post("Failure")
         
         assert result is False
+
+
+@pytest.mark.asyncio
+async def test_telegram_retries_text_on_temporary_api_error(telegram_poster):
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
+         patch("flux_titan.publishers.telegram.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        mock_post.side_effect = [
+            httpx.Response(429, text="Too Many Requests"),
+            httpx.Response(200, json={"ok": True}),
+        ]
+
+        result = await telegram_poster.post("Retry me")
+
+        assert result is True
+        assert mock_post.call_count == 2
+        mock_sleep.assert_called_once()
