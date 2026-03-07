@@ -42,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
 
-      - name: � Restore Database Cache
+      - name: 💾 Restore Database Cache
         uses: actions/cache/restore@v4
         with:
           path: processed.db
@@ -50,7 +50,7 @@ jobs:
           restore-keys: |
             flux-titan-db-
 
-      - name: �🚀 Execute Pipeline
+      - name: 🚀 Execute Pipeline
         env:
           # Required Secrets
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
@@ -75,14 +75,14 @@ jobs:
           flux-titan
           echo "::endgroup::"
 
-      - name: � Save Database Cache
+      - name: 💾 Save Database Cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: processed.db
           key: flux-titan-db-${{ github.run_id }}
 
-      - name: �📊 Generate Action Summary
+      - name: 📊 Generate Action Summary
         if: always()
         run: |
           echo "## 📰 Flux-Titan Execution Report" >> $GITHUB_STEP_SUMMARY

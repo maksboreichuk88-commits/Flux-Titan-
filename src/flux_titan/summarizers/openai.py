@@ -3,9 +3,11 @@ Summarization module using OpenAI API.
 Converts news into "Business Insights" format.
 """
 
+import asyncio
 import logging
 from typing import Optional, Dict, Any
 
+import httpx
 from openai import OpenAI
 from .base import BaseSummarizer
 
@@ -17,6 +19,9 @@ class OpenAISummarizer(BaseSummarizer):
     Summarizes articles using OpenAI API (GPT models).
     Generates professional content for a Telegram channel.
     """
+
+    RETRY_ATTEMPTS = 3
+    RETRY_BASE_DELAY = 1.0
 
     SYSTEM_INSTRUCTION = """You are an editor of a technology and business Telegram news channel.
 Your task is to turn news into concise, informative, and engaging posts.
@@ -57,7 +62,7 @@ Write the post (HTML only, no explanations):"""
     def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
         """
         OpenAI client initialization.
-        
+
         Args:
             api_key: OpenAI API key
             model: GPT model name
@@ -67,13 +72,31 @@ Write the post (HTML only, no explanations):"""
         self.client = OpenAI(api_key=self.api_key)
         logger.info(f"OpenAI summarizer initialized with model: {self.model_name}")
 
+    @staticmethod
+    def _is_retryable_error(exc: Exception) -> bool:
+        """Retry only for transient errors."""
+        if isinstance(exc, (httpx.TimeoutException, httpx.TransportError, TimeoutError)):
+            return True
+
+        status_code = getattr(exc, "status_code", None)
+        if status_code in (408, 409, 429):
+            return True
+        if isinstance(status_code, int) and status_code >= 500:
+            return True
+
+        name = exc.__class__.__name__.lower()
+        if "ratelimit" in name or "timeout" in name or "connection" in name:
+            return True
+
+        return False
+
     async def summarize(self, article: Dict[str, Any]) -> Optional[str]:
         """
         Asynchronous article summarization using OpenAI.
-        
+
         Args:
             article: dictionary with article data
-            
+
         Returns:
             Prepared Telegram post or None
         """
@@ -86,26 +109,40 @@ Write the post (HTML only, no explanations):"""
                 content=article.get("content", article.get("summary", ""))[:3000],
                 link=article.get("link", ""),
             )
-            
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": self.SYSTEM_INSTRUCTION},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1000,
-            )
-            
-            result = response.choices[0].message.content
-            
-            if result:
-                # Clean potential markdown artifacts
-                result = self._clean_response(result)
-                return result.strip()
-            
+
+            for attempt in range(1, self.RETRY_ATTEMPTS + 1):
+                try:
+                    response = self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "system", "content": self.SYSTEM_INSTRUCTION},
+                            {"role": "user", "content": prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=1000,
+                    )
+
+                    result = response.choices[0].message.content
+                    if result:
+                        result = self._clean_response(result)
+                        return result.strip()
+                    return None
+
+                except Exception as e:
+                    retryable = self._is_retryable_error(e)
+                    if attempt >= self.RETRY_ATTEMPTS or not retryable:
+                        logger.error(f"OpenAI summarization error: {e}")
+                        return None
+
+                    delay = self.RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        f"OpenAI temporary error (attempt {attempt}/{self.RETRY_ATTEMPTS}): {e}. "
+                        f"Retrying in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+
             return None
-            
+
         except Exception as e:
             logger.error(f"OpenAI summarization error: {e}")
             return None
@@ -114,9 +151,9 @@ Write the post (HTML only, no explanations):"""
     def _clean_response(text: str) -> str:
         """Clean markdown artifacts from the response."""
         import re
-        
+
         # Remove code blocks if present
         text = re.sub(r'^```html?\s*\n?', '', text, flags=re.MULTILINE)
         text = re.sub(r'\n?```\s*$', '', text, flags=re.MULTILINE)
-        
+
         return text.strip()
