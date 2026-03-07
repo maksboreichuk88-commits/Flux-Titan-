@@ -41,11 +41,14 @@ class Config:
     
     # Required parameters
     telegram_token: str
-    gemini_api_key: str
     channel_id: str
     
     # Optional parameters with default values
+    ai_provider: str = "gemini"
+    gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
     database_path: str = "processed.db"
     max_articles_per_run: int = 5
     rss_feeds: tuple = field(default_factory=lambda: tuple(DEFAULT_RSS_FEEDS))
@@ -59,17 +62,25 @@ class Config:
             ValueError: if required variables are missing
         """
         telegram_token = os.getenv("TG_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN")
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
         channel_id = os.getenv("CHANNEL_ID")
+        ai_provider = os.getenv("AI_PROVIDER", "gemini").lower()
+        
+        gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        openai_api_key = os.getenv("OPENAI_API_KEY", "")
         
         # Validation of required variables
         missing = []
         if not telegram_token:
             missing.append("TELEGRAM_BOT_TOKEN or TG_TOKEN")
-        if not gemini_api_key:
-            missing.append("GEMINI_API_KEY")
         if not channel_id:
             missing.append("CHANNEL_ID")
+            
+        if ai_provider == "gemini" and not gemini_api_key:
+            missing.append("GEMINI_API_KEY (required for Gemini)")
+        elif ai_provider == "openai" and not openai_api_key:
+            missing.append("OPENAI_API_KEY (required for OpenAI)")
+        elif ai_provider not in ("gemini", "openai"):
+            raise ValueError(f"Unsupported AI_PROVIDER: {ai_provider}. Must be 'gemini' or 'openai'.")
         
         if missing:
             raise ValueError(
@@ -93,9 +104,12 @@ class Config:
         
         return cls(
             telegram_token=telegram_token,
-            gemini_api_key=gemini_api_key,
             channel_id=channel_id,
+            ai_provider=ai_provider,
+            gemini_api_key=gemini_api_key,
             gemini_model=os.getenv("GEMINI_MODEL", cls.gemini_model),
+            openai_api_key=openai_api_key,
+            openai_model=os.getenv("OPENAI_MODEL", cls.openai_model),
             database_path=os.getenv("DATABASE_PATH", cls.database_path),
             max_articles_per_run=int(
                 os.getenv("MAX_ARTICLES_PER_RUN", str(cls.max_articles_per_run))

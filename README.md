@@ -62,11 +62,14 @@ cp .env.example .env
 
 ### Required Variables
 *   `TG_TOKEN`: Your Telegram Bot API Token (from [@BotFather](https://t.me/botfather)).
-*   `CHANNEL_ID`: The target Telegram channel (e.g., `@my_awesome_news_channel` or a numeric ID). **Note:** Ensure your bot is added as an Administrator to this channel.
-*   `GEMINI_API_KEY`: Your Google Gemini API key (from [Google AI Studio](https://aistudio.google.com/)).
+*   `CHANNEL_ID`: The target Telegram channel.
+*   `AI_PROVIDER`: Choose your summarizer provider: `gemini` (default) or `openai`.
+*   `GEMINI_API_KEY`: Required if `AI_PROVIDER=gemini`.
+*   `OPENAI_API_KEY`: Required if `AI_PROVIDER=openai`.
 
 ### Optional Variables
-*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-2.5-flash`).
+*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-1.5-flash`).
+*   `OPENAI_MODEL`: The OpenAI model to use (default: `gpt-4o-mini`).
 *   `MAX_ARTICLES_PER_RUN`: Number of new articles to process in a single execution (default: `5`).
 *   `DATABASE_PATH`: Path to the SQLite tracking database (default: `processed.db`).
 *   `CUSTOM_RSS_FEEDS`: A comma-separated list of feeds to monitor. Format: `Name|URL|Icon`. 

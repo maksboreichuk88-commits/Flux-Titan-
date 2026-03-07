@@ -8,6 +8,7 @@ from flux_titan.storage.sqlite import Database
 from flux_titan.feeds import RSSParser
 from flux_titan.image_extractor import ImageExtractor
 from flux_titan.summarizers.gemini import GeminiSummarizer
+from flux_titan.summarizers.openai import OpenAISummarizer
 from flux_titan.publishers.telegram import TelegramPoster
 
 logging.basicConfig(
@@ -21,7 +22,7 @@ logger = logging.getLogger("NewsBot")
 class NewsBot:
     """
     Main orchestrator for Flux-Titan.
-    Coordinates: RSS -> Image -> Gemini -> Telegram -> SQLite.
+    Coordinates: RSS -> Image -> AI -> Telegram -> SQLite.
     """
 
     def __init__(self, config: Config):
@@ -29,15 +30,25 @@ class NewsBot:
         self.db = Database(config.database_path)
         self.rss_parser = RSSParser(config.rss_feeds)
         self.image_extractor = ImageExtractor()
-        self.summarizer = GeminiSummarizer(
-            api_key=config.gemini_api_key,
-            model=config.gemini_model
-        )
+        
+        # Initialize the selected summarizer
+        if config.ai_provider == "openai":
+            self.summarizer = OpenAISummarizer(
+                api_key=config.openai_api_key,
+                model=config.openai_model
+            )
+        else:
+            # Default to Gemini
+            self.summarizer = GeminiSummarizer(
+                api_key=config.gemini_api_key,
+                model=config.gemini_model
+            )
+            
         self.telegram = TelegramPoster(
             token=config.telegram_token,
             channel_id=config.channel_id
         )
-        logger.info("NewsBot initialized")
+        logger.info(f"NewsBot initialized with {config.ai_provider} AI")
 
     async def process_article(self, article: dict) -> bool:
         try:
