@@ -86,6 +86,30 @@ The bot will execute a single run, process any new articles up to the limit defi
 
 ---
 
+## 🐳 Docker Deployment
+
+For self-hosted environments, you can run Flux-Titan using Docker.
+
+### Using Docker Compose (Recommended)
+
+1.  Make sure you have [Docker](https://docs.docker.com/get-docker/) installed.
+2.  Prepare your `.env` file from the template.
+3.  Run the bot:
+    ```bash
+    docker-compose up --build
+    ```
+
+### Using Docker Directly
+
+```bash
+docker build -t flux-titan .
+docker run --env-file .env -v $(pwd)/processed.db:/app/processed.db flux-titan
+```
+
+*Note: Since the bot is a one-shot execution tool, the container will exit after processing articles. Use a scheduler (like `cron` on the host) to run the container periodically.*
+
+---
+
 ## ☁️ GitHub Actions Usage
 
 Flux-Titan is perfectly suited to run on GitHub Actions automatically on a schedule, saving you the need for a 24/7 server.

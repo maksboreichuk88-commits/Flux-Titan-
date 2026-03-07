@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: flux-titan
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./processed.db:/app/processed.db
+    # Note: By default, this runs a single pass and exits.
+    # To run on a schedule, you might want to use a cron job inside the container 
+    # or an external scheduler to start the container periodically.
+    # For a simple "always running" approach with internal loops (if implemented),
+    # use restart: always. 
+    # Currently flux-titan is a one-shot CLI.
