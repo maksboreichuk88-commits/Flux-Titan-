@@ -191,6 +191,26 @@ Please ensure your code follows standard Python conventions (PEP 8) and type hin
 
 ---
 
-## 📄 License
+## 🛠️ Development & Testing
 
-This project is licensed under the MIT License - see the `LICENSE` file for details (if included) or refer to the repository's `pyproject.toml`.
+Flux-Titan includes a comprehensive test suite covering RSS parsing, AI summarization providers, and Telegram publishing.
+
+### Running Tests
+To run all tests locally, make sure you have dev dependencies installed:
+```bash
+pip install -e .[dev]
+python -m pytest
+```
+
+The test suite includes:
+*   `tests/test_summarizer_integration.py`: Integration tests for Gemini and OpenAI providers.
+*   `tests/test_telegram_integration.py`: Tests for message formatting and Telegram API interaction.
+*   `tests/test_bot_e2e.py`: End-to-end execution path for the entire bot flow.
+*   `tests/test_config_yaml.py`: Configuration and feed merging logic.
+
+*Note: All external API calls are mocked during tests. No credits or API quotas are consumed.*
+
+---
+
+## 📄 License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
