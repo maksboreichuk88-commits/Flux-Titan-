@@ -42,18 +42,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install .
 
-      - name: 🚀 Execute Pipeline
+      - name: � Restore Database Cache
+        uses: actions/cache/restore@v4
+        with:
+          path: processed.db
+          key: flux-titan-db-${{ github.run_id }}
+          restore-keys: |
+            flux-titan-db-
+
+      - name: �🚀 Execute Pipeline
         env:
           # Required Secrets
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'gemini' }}
+          
+          # Provider Keys
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           
           # Optional Configuration
           MAX_ARTICLES_PER_RUN: ${{ github.event.inputs.max_articles || '5' }}
-          GEMINI_MODEL: 'gemini-1.5-flash'
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-1.5-flash' }}
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL || 'gpt-4o-mini' }}
+          FEEDS_CONFIG_PATH: 'feeds.yaml'
           
-          # Force unbuffered Python stdout for real-time logs in Actions
+          # Environment
           PYTHONUNBUFFERED: '1'
           LOG_LEVEL: ${{ github.event.inputs.debug == 'true' && 'DEBUG' || 'INFO' }}
         run: |
@@ -61,7 +75,14 @@ jobs:
           flux-titan
           echo "::endgroup::"
 
-      - name: 📊 Generate Action Summary
+      - name: � Save Database Cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: processed.db
+          key: flux-titan-db-${{ github.run_id }}
+
+      - name: �📊 Generate Action Summary
         if: always()
         run: |
           echo "## 📰 Flux-Titan Execution Report" >> $GITHUB_STEP_SUMMARY
@@ -71,7 +92,5 @@ jobs:
           echo "| 🕐 Executed At | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
           echo "| 📊 Pipeline Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
           echo "| ⚙️ Articles Config | ${{ github.event.inputs.max_articles || '5' }} max |" >> $GITHUB_STEP_SUMMARY
-          
-          # Note: The SQLite database is intentionally NOT committed back to the repository.
-          # In a stateless GitHub Actions environment, older historical de-duplication
-          # is limited to the current run unless a persistent cache is configured.
+          echo "| ⚙️ AI Provider | ${{ secrets.AI_PROVIDER || 'gemini' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🛠️ DB Status | State persisted via Cache |" >> $GITHUB_STEP_SUMMARY
