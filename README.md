@@ -66,7 +66,7 @@ cp .env.example .env
 *   `GEMINI_API_KEY`: Your Google Gemini API key (from [Google AI Studio](https://aistudio.google.com/)).
 
 ### Optional Variables
-*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-1.5-flash`).
+*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-2.5-flash`).
 *   `MAX_ARTICLES_PER_RUN`: Number of new articles to process in a single execution (default: `5`).
 *   `DATABASE_PATH`: Path to the SQLite tracking database (default: `processed.db`).
 *   `CUSTOM_RSS_FEEDS`: A comma-separated list of feeds to monitor. Format: `Name|URL|Icon`. 
