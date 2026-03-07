@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "flux-titan"
 version = "0.1.0"
-description = "RSS to Telegram automation bot powered by Gemini AI"
+description = "Self-hosted RSS-to-Telegram automation toolkit with AI summarization"
 authors = [
     { name = "Flux-Titan Contributors" }
 ]
