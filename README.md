@@ -1,134 +1,151 @@
-# 📰 Telegram News Bot
+# Flux-Titan
 
-Автоматический Telegram-бот для парсинга технологических новостей, суммаризации через Gemini AI и публикации в канал с изображениями.
+> **A self-hosted RSS-to-Telegram automation toolkit with AI summarization.**
 
-## ✨ Возможности
+Flux-Titan is a lightweight, customizable pipeline designed to monitor RSS feeds, summarize articles using AI (Google Gemini by default), extract header images, and publish the curated content directly to a Telegram channel.
 
-- 🔄 **Множественные RSS-источники**: TechCrunch, The Verge, Ars Technica и другие
-- 🤖 **AI-суммаризация**: Google Gemini превращает новости в краткие посты
-- 🖼️ **Извлечение изображений**: Автоматически находит og:image
-- 🗄️ **База данных**: SQLite для отслеживания обработанных статей
-- ⏰ **Автоматический запуск**: GitHub Actions (каждый час)
-- 🛡️ **Надежность**: Обработка ошибок, retry-логика
-
-## 🚀 Быстрый старт
-
-### 1. Создание Telegram-бота
-
-1. Найдите [@BotFather](https://t.me/botfather) в Telegram
-2. Отправьте команду `/newbot`
-3. Следуйте инструкциям, получите токен
-4. Добавьте бота в канал как администратора
-
-### 2. Получение Gemini API ключа
-
-1. Перейдите в [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Создайте новый API ключ
-3. Скопируйте ключ
-
-### 3. Настройка GitHub
-
-1. Fork этого репозитория
-2. Перейдите в **Settings → Secrets and variables → Actions**
-3. Добавьте секреты:
-   - `TG_TOKEN`: токен бота от @BotFather
-   - `CHANNEL_ID`: @username канала (или числовой ID)
-   - `GEMINI_API_KEY`: ключ от Google AI
-
-### 4. Активация
-
-1. Сделайте commit изменений в fork
-2. Перейдите в **Actions** → **News Bot**
-3. Нажмите **Enable workflow**
-4. Запустите вручную для проверки
-
-## 📁 Структура проекта
-
-```
-telegram-news-bot/
-├── src/                    # Исходный код
-│   ├── config.py          # Конфигурация
-│   ├── database.py        # SQLite модуль
-│   ├── rss_parser.py      # RSS парсер
-│   ├── image_extractor.py # Извлечение изображений
-│   ├── summarizer.py      # Gemini API
-│   └── telegram_bot.py    # Telegram отправка
-├── .github/workflows/     # GitHub Actions
-│   └── news_bot.yml      # Workflow файл
-├── main.py                # Точка входа
-├── requirements.txt       # Зависимости
-├── .env.example          # Пример конфигурации
-└── README.md             # Этот файл
-```
-
-## ⚙️ Конфигурация
-
-### Локальный запуск
-
-1. Скопируйте `.env.example` в `.env`
-2. Заполните переменные окружения:
-   ```env
-   TG_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
-   CHANNEL_ID=@your_channel
-   GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   ```
-3. Установите зависимости:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Запустите:
-   ```bash
-   python main.py
-   ```
-
-### Дополнительные RSS-ленты
-
-Добавьте в `.env`:
-```env
-CUSTOM_RSS_FEEDS=Habr|https://habr.com/ru/rss/,VC.ru|https://vc.ru/rss
-```
-
-## 🔄 Как работает
-
-```
-RSS-ленты → Парсинг → Проверка дублей → Извлечение изображения
-    ↓
-Gemini AI → Суммаризация → Telegram → База данных
-```
-
-1. **Каждый час** GitHub Actions запускает бота
-2. **Парсинг** загружает статьи из RSS-лент
-3. **Фильтрация** проверяет, не была ли статья обработана
-4. **AI** создает краткую выжимку на русском
-5. **Отправка** публикует пост с изображением в Telegram
-6. **База данных** сохраняет URL обработанных статей
-
-## 📊 Статистика
-
-Бот ведет статистику в `processed.db`:
-- Всего обработанных статей
-- Статистика по источникам
-- Статьи за последние 24 часа
-- Последняя обработка
-
-## 🛠️ Требования
-
-- Python 3.11+
-- Telegram Bot Token
-- Gemini API Key
-- GitHub аккаунт (для Actions)
-
-## 📝 Лицензия
-
-MIT License - свободно использовать и модифицировать
-
-## 🤝 Вклад
-
-Pull requests приветствуются! Основные направления:
-- Новые RSS-источники
-- Улучшение промптов Gemini
-- Дополнительные фичи
+It is designed for simplicity, built to be run as a cron job (via GitHub Actions or locally), and avoids heavy infrastructure dependencies by using a local SQLite database for state management.
 
 ---
 
-**Создано с ❤️ для автоматизации новостных каналов**
+## 🌟 Features
+
+*   **Multi-Source RSS Aggregation:** Monitor multiple RSS feeds simultaneously asynchronously.
+*   **AI Summarization:** Built-in support for Google Gemini to rewrite long articles into concise, engaging Telegram posts. Extensible interface (`BaseSummarizer`) to add OpenAI or Claude.
+*   **Smart Image Extraction:** Automatically parses HTML metadata (`og:image`, `twitter:image`) to attach cover photos to Telegram posts.
+*   **Deduplication:** Prevents duplicate posts using a lightweight SQLite database to track processed articles.
+*   **Serverless Deployment:** Fully compatible with GitHub Actions for hands-free, scheduled execution without hosting costs.
+*   **CLI Interface:** Packaged as a standard Python tool with a robust command-line interface.
+
+---
+
+## 🏗️ Architecture
+
+Flux-Titan follows a pipeline architecture, coordinating data through specific, decoupled modules:
+
+1.  **Feeds (`flux_titan.feeds`):** Asynchronously fetches and parses RSS feeds.
+2.  **Storage (`flux_titan.storage`):** Checks a local SQLite database (`processed.db`) to ensure the article hasn't been posted before.
+3.  **Image Extractor (`flux_titan.image_extractor`):** Scrapes the destination URL for OpenGraph and Twitter image meta-tags.
+4.  **Summarizers (`flux_titan.summarizers`):** Passes the raw article HTML/text to an AI provider (e.g., Gemini) with a specific prompt to generate a Telegram-friendly summary.
+5.  **Publishers (`flux_titan.publishers`):** Posts the final text and image to the configured Telegram channel/chat.
+
+---
+
+## 🚀 Installation
+
+Ensure you have Python 3.11+ installed.
+
+### Clone the Repository
+```bash
+git clone https://github.com/maksboreichuk88-commits/Flux-Titan-.git
+cd Flux-Titan-
+```
+
+### Install the Package
+Flux-Titan is packaged with `pyproject.toml`. Install it (preferably in a virtual environment) using `pip`:
+
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+pip install -e .
+```
+
+---
+
+## ⚙️ Configuration
+
+Flux-Titan relies on environment variables for configuration. Copy the example file and fill in your details:
+
+```bash
+cp .env.example .env
+```
+
+### Required Variables
+*   `TG_TOKEN`: Your Telegram Bot API Token (from [@BotFather](https://t.me/botfather)).
+*   `CHANNEL_ID`: The target Telegram channel (e.g., `@my_awesome_news_channel` or a numeric ID). **Note:** Ensure your bot is added as an Administrator to this channel.
+*   `GEMINI_API_KEY`: Your Google Gemini API key (from [Google AI Studio](https://aistudio.google.com/)).
+
+### Optional Variables
+*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-1.5-flash`).
+*   `MAX_ARTICLES_PER_RUN`: Number of new articles to process in a single execution (default: `5`).
+*   `DATABASE_PATH`: Path to the SQLite tracking database (default: `processed.db`).
+*   `CUSTOM_RSS_FEEDS`: A comma-separated list of feeds to monitor. Format: `Name|URL|Icon`. 
+    *   *Example:* `TechCrunch|https://techcrunch.com/feed/|🔶,TheVerge|https://www.theverge.com/rss/index.xml|🔷`
+
+---
+
+## 💻 Local Usage
+
+Once installed and configured, you can run the bot locally via the command-line interface:
+
+```bash
+flux-titan
+```
+
+The bot will execute a single run, process any new articles up to the limit defined by `MAX_ARTICLES_PER_RUN`, update the local SQLite database, and exit. To run it continuously, set up a cron job or a scheduled task on your local machine to execute `flux-titan` at your preferred interval.
+
+---
+
+## ☁️ GitHub Actions Usage
+
+Flux-Titan is perfectly suited to run on GitHub Actions automatically on a schedule, saving you the need for a 24/7 server.
+
+1.  Fork or clone this repository to your GitHub account.
+2.  Go to your repository **Settings > Secrets and variables > Actions**.
+3.  Add the following **Repository Secrets**:
+    *   `TG_TOKEN`
+    *   `CHANNEL_ID`
+    *   `GEMINI_API_KEY`
+4.  The provided workflow in `.github/workflows/news_bot.yml` is configured to run automatically at the top of every hour (`cron: '0 * * * *'`).
+5.  *(Optional)* You can manually trigger a run via the **Actions** tab on GitHub by clicking **Run workflow**.
+
+*Note: Since the GitHub Actions runner provides a fresh environment every time, the SQLite database state will not persist between automated runs unless you configure an external storage/cache strategy in the workflow. Alternatively, limit `MAX_ARTICLES_PER_RUN` and accept that older articles might not be historically tracked across runs.*
+
+---
+
+## 📊 Example Use Cases
+
+*   **Niche Tech News:** Aggregate feeds from your favorite tech blogs, let Gemini translate and summarize them into a consistent format, and publish to your personal tech channel.
+*   **Crypto Monitoring:** Track crypto news sites and quickly broadcast summarized breaking news to a trading community.
+*   **Internal Company Updates:** Parse industry news and summarize it for an internal Slack/Telegram group.
+
+---
+
+## 📁 Project Structure
+
+```text
+Flux-Titan-/
+├── .github/workflows/  # GitHub Actions CI/CD pipelines
+├── src/flux_titan/     # Main package directory
+│   ├── cli.py          # Unified CLI entry point & Orchestrator
+│   ├── config.py       # Environment configuration loading
+│   ├── feeds.py        # Async RSS parsing
+│   ├── image_extractor.py # HTML meta-tag image extraction
+│   ├── publishers/     # Output destinations (Telegram)
+│   ├── storage/        # State persistence (SQLite)
+│   └── summarizers/    # AI processing routines (Gemini & Abstract Base)
+├── main.py             # Legacy entry point (wraps flux_titan.cli)
+├── pyproject.toml      # Project packaging and dependencies
+├── .env.example        # Template for configuration
+└── requirements.txt    # Forwarding pip requirements for legacy compatibility
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! If you'd like to add a new Summarizer (e.g., OpenAI, Anthropic), a new Publisher (e.g., Discord, Slack), or improve the core logic:
+
+1.  Fork the repository.
+2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
+3.  Commit your changes (`git commit -m 'Add amazing feature'`).
+4.  Push to the branch (`git push origin feature/amazing-feature`).
+5.  Open a Pull Request.
+
+Please ensure your code follows standard Python conventions (PEP 8) and type hints are used.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the `LICENSE` file for details (if included) or refer to the repository's `pyproject.toml`.
