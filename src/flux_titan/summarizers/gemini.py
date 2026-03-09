@@ -1,6 +1,7 @@
 """
 Summarization module using Google Gemini API.
 Converts news into "Business Insights" format.
+Includes tenacity retry for resilience.
 """
 
 import asyncio
@@ -10,6 +11,7 @@ from typing import Optional, Dict, Any
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold, GenerationConfig
 from google.api_core import exceptions as google_exceptions
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .base import BaseSummarizer
 
@@ -105,9 +107,15 @@ Write the post (HTML only, no explanations):"""
             logger.error(f"Gemini initialization error: {e}")
             raise
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
     def _generate_sync(self, prompt: str) -> Optional[str]:
         """
         Synchronous generation (for running in thread pool).
+        Wrapped with @retry for network resilience.
         
         Args:
             prompt: prepared prompt
@@ -128,14 +136,16 @@ Write the post (HTML only, no explanations):"""
             
         except google_exceptions.InvalidArgument as e:
             logger.error(f"Gemini: invalid argument - {e}")
+            raise
         except google_exceptions.ResourceExhausted as e:
             logger.error(f"Gemini: quota exceeded - {e}")
+            raise
         except google_exceptions.GoogleAPIError as e:
             logger.error(f"Gemini API error: {e}")
+            raise
         except Exception as e:
             logger.error(f"Unexpected Gemini error: {e}")
-        
-        return None
+            raise
 
     async def summarize(self, article: Dict[str, Any]) -> Optional[str]:
         """

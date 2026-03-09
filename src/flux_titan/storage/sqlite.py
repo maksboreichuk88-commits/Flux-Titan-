@@ -1,12 +1,13 @@
 """
 SQLite database module.
 Tracks processed articles to prevent duplicates.
+Provides recent-title retrieval for semantic deduplication.
 """
 
 import sqlite3
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 
 logger = logging.getLogger("NewsBot.Database")
@@ -28,14 +29,22 @@ class Database:
             db_path: path to the database file
         """
         self.db_path = db_path
+        self._memory_conn: Optional[sqlite3.Connection] = None
         self._init_schema()
         logger.info(f"Database initialized: {db_path}")
 
     @contextmanager
     def _get_connection(self):
         """Context manager for DB connection."""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
+        is_memory_db = self.db_path == ":memory:"
+        if is_memory_db:
+            if self._memory_conn is None:
+                self._memory_conn = sqlite3.connect(self.db_path)
+                self._memory_conn.row_factory = sqlite3.Row
+            conn = self._memory_conn
+        else:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
         try:
             yield conn
             conn.commit()
@@ -43,7 +52,8 @@ class Database:
             conn.rollback()
             raise
         finally:
-            conn.close()
+            if not is_memory_db:
+                conn.close()
 
     def _init_schema(self) -> None:
         """Database schema initialization."""
@@ -128,6 +138,30 @@ class Database:
             logger.error(f"DB write error: {e}")
             return False
 
+    def get_recent_titles(self, hours: int = 24) -> List[str]:
+        """
+        Get titles of articles processed within the last N hours.
+        Used by the semantic deduplication filter.
+        
+        Args:
+            hours: number of hours to look back (default 24)
+            
+        Returns:
+            List of article titles
+        """
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT title FROM processed_articles "
+                    "WHERE processed_at > datetime('now', ?)",
+                    (f"-{hours} hours",)
+                )
+                return [row["title"] for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logger.error(f"Error getting recent titles: {e}")
+            return []
+
     def get_stats(self) -> Dict[str, Any]:
         """
         Get database statistics.
@@ -191,10 +225,9 @@ class Database:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    f"""
-                    DELETE FROM processed_articles 
-                    WHERE processed_at < datetime('now', '-{days} days')
-                    """
+                    "DELETE FROM processed_articles "
+                    "WHERE processed_at < datetime('now', ?)",
+                    (f"-{days} days",)
                 )
                 deleted = cursor.rowcount
                 

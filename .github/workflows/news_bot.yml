@@ -1,48 +1,47 @@
-name: 📰 News Bot Automator
+name: Flux-Titan Newsroom Run
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Runs every hour at minute 0
-  
+    - cron: '0 * * * *'
+
   workflow_dispatch:
     inputs:
       max_articles:
-        description: 'Maximum articles to process'
+        description: Maximum articles to process
         required: false
         default: '5'
       debug:
-        description: 'Enable DEBUG logging'
+        description: Enable DEBUG logging
         required: false
         type: boolean
         default: false
 
-# Prevent duplicate parallel runs
 concurrency:
-  group: news-bot
+  group: flux-titan-newsroom
   cancel-in-progress: false
 
 jobs:
-  run-bot:
-    name: 🤖 Run Flux-Titan
+  run-newsroom:
+    name: Run Flux-Titan newsroom
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
-      - name: 📥 Checkout repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐍 Setup Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: 📦 Install Flux-Titan
+      - name: Install Flux-Titan
         run: |
           python -m pip install --upgrade pip
           pip install .
 
-      - name: � Restore Database Cache
+      - name: Restore processed state cache
         uses: actions/cache/restore@v4
         with:
           path: processed.db
@@ -50,47 +49,43 @@ jobs:
           restore-keys: |
             flux-titan-db-
 
-      - name: �🚀 Execute Pipeline
+      - name: Run newsroom pipeline
         env:
-          # Required Secrets
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'gemini' }}
-          
-          # Provider Keys
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          
-          # Optional Configuration
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          KIMI_API_KEY: ${{ secrets.KIMI_API_KEY }}
           MAX_ARTICLES_PER_RUN: ${{ github.event.inputs.max_articles || '5' }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL || 'gemini-1.5-flash' }}
           OPENAI_MODEL: ${{ secrets.OPENAI_MODEL || 'gpt-4o-mini' }}
+          KIMI_MODEL: ${{ secrets.KIMI_MODEL }}
           FEEDS_CONFIG_PATH: 'feeds.yaml'
-          
-          # Environment
           PYTHONUNBUFFERED: '1'
           LOG_LEVEL: ${{ github.event.inputs.debug == 'true' && 'DEBUG' || 'INFO' }}
         run: |
-          echo "::group::Bot Execution Logs"
+          echo "::group::Newsroom run logs"
           flux-titan
           echo "::endgroup::"
 
-      - name: � Save Database Cache
+      - name: Save processed state cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: processed.db
           key: flux-titan-db-${{ github.run_id }}
 
-      - name: �📊 Generate Action Summary
+      - name: Generate run summary
         if: always()
         run: |
-          echo "## 📰 Flux-Titan Execution Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Flux-Titan newsroom run report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🕐 Executed At | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📊 Pipeline Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚙️ Articles Config | ${{ github.event.inputs.max_articles || '5' }} max |" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚙️ AI Provider | ${{ secrets.AI_PROVIDER || 'gemini' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🛠️ DB Status | State persisted via Cache |" >> $GITHUB_STEP_SUMMARY
+          echo "| Executed At | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+          echo "| Run Status | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Articles Config | ${{ github.event.inputs.max_articles || '5' }} max |" >> $GITHUB_STEP_SUMMARY
+          echo "| AI Backend | ${{ secrets.AI_PROVIDER || 'gemini' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Processed State | Cached via Actions cache |" >> $GITHUB_STEP_SUMMARY

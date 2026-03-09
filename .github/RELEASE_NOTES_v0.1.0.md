@@ -1,26 +1,31 @@
-# Release Notes - v0.1.0 🚀
+# Release Notes - v0.1.0
 
-Welcome to the first official open-source release of **Flux-Titan**!
+Flux-Titan is an early-stage open-source release of a self-hosted AI newsroom for Telegram channels.
 
-Flux-Titan is a self-hosted RSS-to-Telegram automation toolkit designed to help you build your own AI-powered news channels with ease.
+The project is designed for a narrow workflow:
 
-### ✨ Key Features
-- **Smart Summarization:** Uses Google Gemini to turn long articles into concise, engaging Telegram posts.
-- **Image Extraction:** Automatically finds and attaches cover images to your posts.
-- **Deduplication:** Integrated SQLite database ensures no duplicate posts.
-- **Serverless Ready:** Built-in support for running via GitHub Actions (no server required!).
-- **Standardized Python Package:** Easy installation via `pip`.
+1. collect news from selected sources
+2. filter duplicates and lightweight weak items
+3. rewrite items into Telegram-ready posts
+4. attach images
+5. publish automatically
 
-### 🛠️ Changes in this release
-- Initial public release of the core pipeline.
-- Added GitHub Actions workflow for automated hourly runs.
-- Added contributor templates (Bug Reports, Feature Requests).
-- Included comprehensive documentation and usage examples.
+## What is included in v0.1.0
 
-### 🚀 Getting Started
-1. Fork the repository.
-2. Set up your secrets (`TG_TOKEN`, `CHANNEL_ID`, `GEMINI_API_KEY`).
-3. Enable GitHub Actions or run locally with `pip install . && flux-titan`.
+- a lightweight one-shot pipeline for Telegram publishing
+- AI summarization support
+- image extraction from source pages
+- local SQLite state for deduplication
+- GitHub Actions and Docker entry points for self-hosted runs
+- contributor documentation, issue templates, and a test suite
 
----
-*Built with ❤️ for the open-source community.*
+## Notes on scope
+
+Flux-Titan is intentionally small.
+It is not a hosted platform, not a multi-channel publisher, and not a dashboard product.
+
+## Getting started
+
+1. Fork or clone the repository
+2. Set up your secrets and `.env` values (`TG_TOKEN`, `CHANNEL_ID`, and your AI backend credentials)
+3. Run locally with `pip install -e . && flux-titan` or schedule the included GitHub Actions workflow

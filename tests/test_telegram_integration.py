@@ -8,6 +8,35 @@ def telegram_poster():
     return TelegramPoster(token="fake_token", channel_id="@test_channel")
 
 @pytest.mark.asyncio
+async def test_telegram_connection_success(telegram_poster):
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = [
+            httpx.Response(200, json={"ok": True, "result": {"username": "test_bot"}}),
+            httpx.Response(200, json={"ok": True, "result": {"id": 123}}),
+        ]
+
+        result = await telegram_poster.test_connection()
+
+        assert result is True
+        assert mock_get.await_count == 2
+        assert "getMe" in mock_get.await_args_list[0].args[0]
+        assert "getChat" in mock_get.await_args_list[1].args[0]
+        assert mock_get.await_args_list[1].kwargs["params"]["chat_id"] == "@test_channel"
+
+@pytest.mark.asyncio
+async def test_telegram_connection_invalid_chat(telegram_poster):
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = [
+            httpx.Response(200, json={"ok": True, "result": {"username": "test_bot"}}),
+            httpx.Response(400, text='{"ok":false,"description":"Bad Request: chat not found"}'),
+        ]
+
+        result = await telegram_poster.test_connection()
+
+        assert result is False
+        assert mock_get.await_count == 2
+
+@pytest.mark.asyncio
 async def test_telegram_send_text_success(telegram_poster):
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_post.return_value = httpx.Response(200, json={"ok": True})

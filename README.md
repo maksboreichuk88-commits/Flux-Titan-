@@ -1,219 +1,311 @@
 # Flux-Titan
 
-> [!IMPORTANT]
-> **Flux-Titan is currently in an early-stage public release (v0.1.x).** It is a small personal automation tool and has not been widely adopted or battle-tested in large-scale production environments. Use with this in mind.
+> Self-hosted AI newsroom for Telegram channels.
+>
+> Turn selected news sources into ready-to-publish Telegram posts with AI summarization.
 
-> **A self-hosted RSS-to-Telegram automation toolkit with AI summarization.**
+Flux-Titan is a focused, early-stage open-source tool for running a small Telegram newsroom from selected sources.
+It collects news, filters duplicates and lightweight weak items, rewrites stronger items into Telegram-ready posts, attaches images, and publishes automatically.
 
-Flux-Titan is a lightweight, customizable pipeline designed to monitor RSS feeds, summarize articles using AI (Google Gemini by default), extract header images, and publish the curated content directly to a Telegram channel.
+It is intentionally narrow:
+- Telegram is the only output channel.
+- The runtime is a one-shot pipeline you can schedule with cron or GitHub Actions.
+- Ranking and filtering are practical but still lightweight today.
 
-It is designed for simplicity, built to be run as a cron job (via GitHub Actions or locally), and avoids heavy infrastructure dependencies by using a local SQLite database for state management.
+## How It Works
 
----
+1. Collect from selected sources
+2. Filter duplicates and weak items
+3. Rewrite into Telegram-ready posts
+4. Attach images
+5. Publish automatically
 
-## 🌟 Features
-
-*   **Multi-Source RSS Aggregation:** Monitor multiple RSS feeds simultaneously asynchronously.
-*   **AI Summarization:** Built-in support for Google Gemini to rewrite long articles into concise, engaging Telegram posts. Extensible interface (`BaseSummarizer`) to add OpenAI or Claude.
-*   **Smart Image Extraction:** Automatically parses HTML metadata (`og:image`, `twitter:image`) to attach cover photos to Telegram posts.
-*   **Deduplication:** Prevents duplicate posts using a lightweight SQLite database to track processed articles.
-*   **Serverless Deployment:** Fully compatible with GitHub Actions for hands-free, scheduled execution without hosting costs.
-*   **CLI Interface:** Packaged as a standard Python tool with a robust command-line interface.
-
----
-
-## 🏗️ Architecture
-
-Flux-Titan follows a pipeline architecture, coordinating data through specific, decoupled modules:
-
-1.  **Feeds (`flux_titan.feeds`):** Asynchronously fetches and parses RSS feeds.
-2.  **Storage (`flux_titan.storage`):** Checks a local SQLite database (`processed.db`) to ensure the article hasn't been posted before.
-3.  **Image Extractor (`flux_titan.image_extractor`):** Scrapes the destination URL for OpenGraph and Twitter image meta-tags.
-4.  **Summarizers (`flux_titan.summarizers`):** Passes the raw article HTML/text to an AI provider (e.g., Gemini) with a specific prompt to generate a Telegram-friendly summary.
-5.  **Publishers (`flux_titan.publishers`):** Posts the final text and image to the configured Telegram channel/chat.
-
----
-
-## Installation
-
-Ensure you have Python 3.11+ installed.
-
-### Clone the Repository
-```bash
-git clone https://github.com/maksboreichuk88-commits/Flux-Titan-.git
-cd Flux-Titan-
-```
-
-### Install the Package
-Flux-Titan is packaged with `pyproject.toml`. Install it (preferably in a virtual environment) using `pip`:
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scripts\activate
-pip install -e .
-```
-
----
-
-## ⚙️ Configuration
-
-Flux-Titan relies on environment variables for configuration. Copy the example file and fill in your details:
+## Quick Start
 
 ```bash
 cp .env.example .env
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .
+flux-titan
 ```
 
-### Required Variables
-*   `TG_TOKEN`: Your Telegram Bot API Token (from [@BotFather](https://t.me/botfather)).
-*   `CHANNEL_ID`: The target Telegram channel.
-*   `AI_PROVIDER`: Choose your summarizer provider: `gemini` (default) or `openai`.
-*   `GEMINI_API_KEY`: Required if `AI_PROVIDER=gemini`.
-*   `OPENAI_API_KEY`: Required if `AI_PROVIDER=openai`.
+What you need before the first run:
+- a Telegram bot token
+- a Telegram channel or chat ID
+- one AI backend credential set
 
-### Optional Variables
-*   `GEMINI_MODEL`: The Gemini model to use (default: `gemini-2.5-flash`).
-*   `OPENAI_MODEL`: The OpenAI model to use (default: `gpt-4o-mini`).
-*   `MAX_ARTICLES_PER_RUN`: Number of new articles to process in a single execution (default: `5`).
-### RSS Feeds Configuration
+## Preview
 
-You can manage your sources in two ways:
+Screenshot placeholder: no real screenshot is committed yet.
 
-#### 1. YAML File (Recommended)
-Create a `feeds.yaml` in the project root. Flux-Titan will automatically detect it:
+GIF/demo placeholder: no demo asset is committed yet.
+
+## Who Is This For?
+
+Flux-Titan is for:
+
+- a small Telegram channel operator who wants selected sources turned into publishable posts
+- a niche community digest operator who needs a lightweight scheduled editorial flow
+- a solo operator or small team running a self-hosted newsroom pipeline
+
+It is not trying to be:
+
+- a SaaS product
+- a media platform
+- a dashboard-heavy editorial suite
+- a multi-channel publisher
+- a general-purpose AI agent framework
+
+## Example Output
+
+Illustrative example only. This is not a screenshot, benchmark, or claim about a specific live channel.
+
+```html
+<b>AI coding tools move closer to team workflows</b>
+
+Several developer tool vendors are shifting from standalone chat interfaces toward source-aware workflows tied to real repositories. For Telegram channels, that matters because it turns product updates into clearer operational news instead of abstract AI hype.
+
+#AI #DevTools
+<a href="https://example.com/story">Source</a>
+```
+
+## What It Is
+
+Flux-Titan is a self-hosted newsroom workflow for Telegram channels.
+It is built for operators who want a small, controllable pipeline instead of a hosted product, web dashboard, or multi-platform publishing system.
+
+The current workflow is:
+
+1. Collect news from selected sources
+2. Filter duplicates and weak items
+3. Rewrite news into Telegram-ready posts
+4. Attach images
+5. Publish automatically
+
+## Core Workflow
+
+### 1. Collect
+
+Flux-Titan pulls news from selected RSS feeds and small curated source lists.
+Today, sources from `feeds.yaml` and `CUSTOM_RSS_FEEDS` are merged with the built-in defaults.
+
+### 2. Filter
+
+The project already removes duplicates through SQLite state tracking.
+Weak-item filtering is still lightweight for now and mostly comes from source choice, feed ordering, and per-run limits.
+
+### 3. Rewrite
+
+Articles are rewritten into Telegram-ready posts through:
+
+- `gemini`
+- `openai_compatible`
+
+Compatibility aliases remain available for existing setups:
+
+- `openai`
+- `kimi`
+
+### 4. Attach Image
+
+Flux-Titan attempts to attach a usable image before publishing.
+The current strategy is practical rather than exhaustive and fits lightweight self-hosted runs.
+
+### 5. Publish
+
+The final post is sent directly to a Telegram channel or chat using a bot token.
+
+## Image Strategy
+
+Flux-Titan now uses a small image fallback chain.
+
+The current active step is to prefer the original article image from page metadata such as:
+
+- `og:image`
+- `twitter:image`
+
+If a usable image is found, it is attached to the Telegram post.
+If not, Flux-Titan falls back to a text-only post so the newsroom run can still complete.
+
+The next intended fallback is a public image source, but that is not wired in yet.
+Generated images are explicitly future fallback behavior, not the default path.
+
+## OpenAI-Compatible Backends
+
+Flux-Titan supports two main backend paths:
+
+- `gemini`
+- `openai_compatible`
+
+`openai_compatible` is the main path for OpenAI-style APIs.
+Use it with:
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- optional `OPENAI_BASE_URL`
+
+Compatibility notes:
+
+- `AI_PROVIDER=openai` still works as an alias
+- `AI_PROVIDER=kimi` still works as an alias for existing setups
+- `KIMI_API_KEY` and `KIMI_MODEL` are kept for compatibility, but new setups should prefer `openai_compatible`
+
+## Why Self-Hosted?
+
+Self-hosting keeps the newsroom small and controllable:
+
+- you choose the sources
+- you choose the prompts and AI backend
+- you control secrets and state locally
+- you can run it from a VM, local machine, container, or GitHub Actions
+- you do not need a separate dashboard to operate it
+
+## Minimal Production Setup
+
+The smallest practical setup is:
+
+1. Fill in `.env` with Telegram and AI backend credentials
+2. Configure selected sources through `feeds.yaml` or `CUSTOM_RSS_FEEDS`
+3. Persist `processed.db` between scheduled runs
+4. Run `flux-titan` from one scheduler such as cron, Task Scheduler, or GitHub Actions
+
+## Installation
+
+Flux-Titan requires Python 3.11 or newer.
+
+```bash
+git clone https://github.com/maksboreichuk88-commits/Flux-Titan-.git
+cd Flux-Titan-
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e .
+```
+
+## Configuration
+
+Copy `.env.example` to `.env` and fill in the values you need.
+
+### Required
+
+- `TG_TOKEN`: Telegram bot token from [@BotFather](https://t.me/botfather)
+- `CHANNEL_ID`: target Telegram channel username or numeric chat ID
+- `AI_PROVIDER`: `gemini` or `openai_compatible`
+
+### Backend Credentials
+
+- `GEMINI_API_KEY`: required when `AI_PROVIDER=gemini`
+- `OPENAI_API_KEY`: required when `AI_PROVIDER=openai_compatible`
+
+### Optional Backend Settings
+
+- `GEMINI_MODEL`
+- `OPENAI_MODEL`
+- `OPENAI_BASE_URL`: set this when using a self-hosted or third-party OpenAI-compatible backend
+
+### Optional Runtime Settings
+
+- `MAX_ARTICLES_PER_RUN`: cap the number of new articles per run
+- `DATABASE_PATH`: path to the SQLite state file
+- `FEEDS_CONFIG_PATH`: custom path to `feeds.yaml`
+
+## Selected Sources
+
+You can add sources in two ways.
+
+### Option 1: `feeds.yaml`
+
 ```yaml
 feeds:
-  - name: "Flux-Titan Dev"
-    url: "https://github.com/maksboreichuk88-commits/Flux-Titan-/commits/main.atom"
-    icon: "🚀"
+  - name: "Example Source"
+    url: "https://example.com/feed.xml"
+    icon: "EX"
 ```
-*Specify a custom path via `FEEDS_CONFIG_PATH` if needed.*
 
-#### 2. Environment Variable
-Use `CUSTOM_RSS_FEEDS` for quick setups:
+### Option 2: `CUSTOM_RSS_FEEDS`
+
 ```bash
-CUSTOM_RSS_FEEDS="Name1|URL1|Icon1,Name2|URL2|Icon2"
+CUSTOM_RSS_FEEDS="Source One|https://example.com/feed.xml|EX,Source Two|https://example.org/rss|S2"
 ```
 
-*Note: Sources from YAML and ENV are merged with the default feeds.*
+## Running Flux-Titan
 
----
-
-## 💻 Local Usage
-
-Once installed and configured, you can run the bot locally via the command-line interface:
+Run one newsroom pass:
 
 ```bash
 flux-titan
 ```
 
-The bot will execute a single run, process any new articles up to the limit defined by `MAX_ARTICLES_PER_RUN`, update the local SQLite database, and exit. To run it continuously, set up a cron job or a scheduled task on your local machine to execute `flux-titan` at your preferred interval.
+The command will:
 
----
+- load sources
+- fetch recent items
+- skip already processed links
+- rewrite new items
+- attach images where available
+- publish to Telegram
+- update local state in `processed.db`
 
-## 🐳 Docker Deployment
+Flux-Titan exits after one run. To keep it operating, schedule it with cron, Task Scheduler, or GitHub Actions.
 
-For self-hosted environments, you can run Flux-Titan using Docker.
+## Docker
 
-### Using Docker Compose (Recommended)
+```bash
+docker-compose up --build
+```
 
-1.  Make sure you have [Docker](https://docs.docker.com/get-docker/) installed.
-2.  Prepare your `.env` file from the template.
-3.  Run the bot:
-    ```bash
-    docker-compose up --build
-    ```
-
-### Using Docker Directly
+Or run directly:
 
 ```bash
 docker build -t flux-titan .
 docker run --env-file .env -v $(pwd)/processed.db:/app/processed.db flux-titan
 ```
 
-*Note: Since the bot is a one-shot execution tool, the container will exit after processing articles. Use a scheduler (like `cron` on the host) to run the container periodically.*
+## GitHub Actions
 
----
+The repository includes a scheduled workflow in [news_bot.yml](.github/workflows/news_bot.yml).
+Use repository secrets for:
 
-## ☁️ GitHub Actions Usage
+- `TG_TOKEN`
+- `CHANNEL_ID`
+- `AI_PROVIDER`
+- `GEMINI_API_KEY`
+- `OPENAI_API_KEY`
+- `OPENAI_BASE_URL` when needed
 
-Flux-Titan is perfectly suited to run on GitHub Actions automatically on a schedule, saving you the need for a 24/7 server.
+This is a good fit for lightweight scheduled newsroom runs, but it is still a one-shot job and not a persistent service.
 
-1.  Fork or clone this repository to your GitHub account.
-2.  Go to your repository **Settings > Secrets and variables > Actions**.
-3.  Add the following **Repository Secrets**:
-    *   `TG_TOKEN`
-    *   `CHANNEL_ID`
-    *   `GEMINI_API_KEY`
-4.  The provided workflow in `.github/workflows/news_bot.yml` is configured to run automatically at the top of every hour (`cron: '0 * * * *'`).
-5.  *(Optional)* You can manually trigger a run via the **Actions** tab on GitHub by clicking **Run workflow**.
+## Example Use Cases
 
-*Note: Since the GitHub Actions runner provides a fresh environment every time, the SQLite database state will not persist between automated runs unless you configure an external storage/cache strategy in the workflow. Alternatively, limit `MAX_ARTICLES_PER_RUN` and accept that older articles might not be historically tracked across runs.*
+- small Telegram channel: turn selected tech or local industry sources into short channel posts
+- niche community digest: publish grouped updates for a focused community around one topic
+- self-hosted newsroom pipeline: run a controllable editorial workflow without a hosted dashboard
 
----
+## Examples
 
-## 📊 Example Use Cases
+See [examples/README.md](examples/README.md) for reusable environment examples.
 
-*   **Niche Tech News:** Aggregate feeds from your favorite tech blogs, let Gemini translate and summarize them into a consistent format, and publish to your personal tech channel.
-*   **Crypto Monitoring:** Track crypto news sites and quickly broadcast summarized breaking news to a trading community.
-*   **Internal Company Updates:** Parse industry news and summarize it for an internal Slack/Telegram group.
+## Roadmap
 
----
+See [ROADMAP.md](ROADMAP.md) for the current product direction and newsroom backlog themes.
 
-## 📁 Project Structure
+## Development and Testing
 
-```text
-Flux-Titan-/
-├── .github/workflows/  # GitHub Actions CI/CD pipelines
-├── src/flux_titan/     # Main package directory
-│   ├── cli.py          # Unified CLI entry point & Orchestrator
-│   ├── config.py       # Environment configuration loading
-│   ├── feeds.py        # Async RSS parsing
-│   ├── image_extractor.py # HTML meta-tag image extraction
-│   ├── publishers/     # Output destinations (Telegram)
-│   ├── storage/        # State persistence (SQLite)
-│   └── summarizers/    # AI processing routines (Gemini & Abstract Base)
-├── main.py             # Legacy entry point (wraps flux_titan.cli)
-├── pyproject.toml      # Project packaging and dependencies
-├── .env.example        # Template for configuration
-└── requirements.txt    # Forwarding pip requirements for legacy compatibility
-```
+Install development dependencies and run the test suite:
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! If you'd like to add a new Summarizer (e.g., OpenAI, Anthropic), a new Publisher (e.g., Discord, Slack), or improve the core logic:
-
-1.  Fork the repository.
-2.  Create a feature branch (`git checkout -b feature/amazing-feature`).
-3.  Commit your changes (`git commit -m 'Add amazing feature'`).
-4.  Push to the branch (`git push origin feature/amazing-feature`).
-5.  Open a Pull Request.
-
-Please ensure your code follows standard Python conventions (PEP 8) and type hints are used.
-
----
-
-## 🛠️ Development & Testing
-
-Flux-Titan includes a comprehensive test suite covering RSS parsing, AI summarization providers, and Telegram publishing.
-
-### Running Tests
-To run all tests locally, make sure you have dev dependencies installed:
 ```bash
 pip install -e .[dev]
 python -m pytest
 ```
 
-The test suite includes:
-*   `tests/test_summarizer_integration.py`: Integration tests for Gemini and OpenAI providers.
-*   `tests/test_telegram_integration.py`: Tests for message formatting and Telegram API interaction.
-*   `tests/test_bot_e2e.py`: End-to-end execution path for the entire bot flow.
-*   `tests/test_config_yaml.py`: Configuration and feed merging logic.
+The current test suite covers:
 
-*Note: All external API calls are mocked during tests. No credits or API quotas are consumed.*
+- configuration loading
+- RSS parsing
+- summarizer integrations
+- Telegram publishing behavior
+- end-to-end pipeline flow
 
----
+## License
 
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Flux-Titan is licensed under the MIT License. See [LICENSE](LICENSE).
