@@ -74,21 +74,11 @@ class NewsEvaluator:
             config.factuality_threshold,
         )
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        reraise=True,
-    )
     async def evaluate(self, article: Dict[str, Any]) -> EvaluationResult:
         """
         Run article through the AI Judge.
-        Retries up to 3 times on network failure OR if the LLM fails to output valid JSON.
-
-        Args:
-            article: dict with 'title' and 'content' / 'summary' keys.
-
-        Returns:
-            EvaluationResult with scores and approval status.
+        JSON parsing happens inside the LLM sync call (under @retry),
+        so bad JSON causes an immediate LLM re-call, not just logging.
         """
         title = article.get("title", "")
         content = article.get("content", article.get("summary", ""))[:2000]
@@ -96,46 +86,45 @@ class NewsEvaluator:
 
         try:
             if self.config.ai_provider == "gemini":
-                raw = await self._call_gemini(user_prompt)
+                return await asyncio.to_thread(self._gemini_generate_sync, user_prompt)
             else:
-                raw = await self._call_openai(user_prompt)
-
-            if not raw:
-                # If the API returned nothing, it might be a temporary hiccup, raise to trigger tenacity retry
-                raise ValueError("Empty response from AI Judge")
-
-            return self._parse_response(raw)
-
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.warning("Invalid JSON from LLM, retrying... (%s) | raw=%s", e, raw[:100] if 'raw' in locals() and raw else "<empty>")
-            raise  # Let tenacity catch and retry
+                return await asyncio.to_thread(self._openai_generate_sync, user_prompt)
 
         except Exception as e:
-            # Fallback for unexpected terminal errors after retries exhaustion
-            logger.error("Evaluation definitely failed: %s — rejecting article", e)
+            logger.error("Evaluation failed after all retries: %s — rejecting article", e)
             return EvaluationResult(raw_response=str(e))
 
     # ── Gemini backend ──────────────────────────────────────────────
 
-    def _gemini_generate_sync(self, prompt: str) -> Optional[str]:
-        """Synchronous Gemini call (runs in thread pool)."""
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((ValueError, json.JSONDecodeError)),
+        reraise=True,
+    )
+    def _gemini_generate_sync(self, prompt: str) -> EvaluationResult:
+        """Synchronous Gemini call + JSON parse. @retry handles both network and bad JSON."""
         genai.configure(api_key=self.config.gemini_api_key)
         model = genai.GenerativeModel(
             model_name=self.config.gemini_model,
             system_instruction=self._system_prompt,
         )
         response = model.generate_content(prompt)
-        if response.parts:
-            return response.text
-        return None
-
-    async def _call_gemini(self, prompt: str) -> Optional[str]:
-        return await asyncio.to_thread(self._gemini_generate_sync, prompt)
+        if not response.parts:
+            raise ValueError("Gemini returned empty response")
+        raw = response.text
+        return self._parse_and_raise(raw)
 
     # ── OpenAI-compatible backend ───────────────────────────────────
 
-    def _openai_generate_sync(self, prompt: str) -> Optional[str]:
-        """Synchronous OpenAI call (runs in thread pool)."""
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((ValueError, json.JSONDecodeError)),
+        reraise=True,
+    )
+    def _openai_generate_sync(self, prompt: str) -> EvaluationResult:
+        """Synchronous OpenAI call + JSON parse. @retry handles both network and bad JSON."""
         client_kwargs: Dict[str, Any] = {"api_key": self.config.openai_api_key}
         if self.config.openai_base_url:
             client_kwargs["base_url"] = self.config.openai_base_url
@@ -150,16 +139,20 @@ class NewsEvaluator:
             temperature=0.0,
             max_tokens=200,
         )
-        return response.choices[0].message.content
+        raw = response.choices[0].message.content
+        if not raw:
+            raise ValueError("OpenAI returned empty response")
+        return self._parse_and_raise(raw)
 
-    async def _call_openai(self, prompt: str) -> Optional[str]:
-        return await asyncio.to_thread(self._openai_generate_sync, prompt)
-
-    # ── Response parsing ────────────────────────────────────────────
+    # ── JSON parsing ────────────────────────────────────────────────
 
     @staticmethod
-    def _parse_response(raw: str) -> EvaluationResult:
-        """Parse JSON from the LLM response. Raises exception on failure so tenacity retries."""
+    def _parse_and_raise(raw: str) -> EvaluationResult:
+        """
+        Parse JSON from LLM. Raises ValueError/JSONDecodeError on failure.
+        This is intentional — the caller is under @retry, so bad JSON
+        causes a fresh LLM call instead of silently failing.
+        """
         cleaned = raw.strip()
         # Strip ```json ... ``` wrappers
         if cleaned.startswith("```"):
@@ -168,13 +161,13 @@ class NewsEvaluator:
             cleaned = cleaned.rsplit("```", 1)[0]
         cleaned = cleaned.strip()
 
-        # Will raise json.JSONDecodeError if invalid, letting tenacity retry the LLM call
+        # Raises json.JSONDecodeError → tenacity catches → LLM is called again
         data = json.loads(cleaned)
-        
-        # Verify schema implicitly by fetching keys (will raise ValueError/TypeError if malformed)
+
         return EvaluationResult(
-            clickbait_score=int(data.get("clickbait_score", 100)),
-            factuality_score=int(data.get("factuality_score", 0)),
-            is_approved=bool(data.get("is_approved", False)),
+            clickbait_score=int(data["clickbait_score"]),
+            factuality_score=int(data["factuality_score"]),
+            is_approved=bool(data["is_approved"]),
             raw_response=raw,
         )
+
