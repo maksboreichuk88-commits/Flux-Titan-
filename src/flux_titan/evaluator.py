@@ -74,9 +74,15 @@ class NewsEvaluator:
             config.factuality_threshold,
         )
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        reraise=True,
+    )
     async def evaluate(self, article: Dict[str, Any]) -> EvaluationResult:
         """
         Run article through the AI Judge.
+        Retries up to 3 times on network failure OR if the LLM fails to output valid JSON.
 
         Args:
             article: dict with 'title' and 'content' / 'summary' keys.
@@ -95,22 +101,22 @@ class NewsEvaluator:
                 raw = await self._call_openai(user_prompt)
 
             if not raw:
-                logger.warning("Empty AI Judge response — rejecting article")
-                return EvaluationResult(raw_response="<empty>")
+                # If the API returned nothing, it might be a temporary hiccup, raise to trigger tenacity retry
+                raise ValueError("Empty response from AI Judge")
 
             return self._parse_response(raw)
 
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning("Invalid JSON from LLM, retrying... (%s) | raw=%s", e, raw[:100] if 'raw' in locals() and raw else "<empty>")
+            raise  # Let tenacity catch and retry
+
         except Exception as e:
-            logger.error("Evaluation failed: %s — rejecting article", e)
+            # Fallback for unexpected terminal errors after retries exhaustion
+            logger.error("Evaluation definitely failed: %s — rejecting article", e)
             return EvaluationResult(raw_response=str(e))
 
     # ── Gemini backend ──────────────────────────────────────────────
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        reraise=True,
-    )
     def _gemini_generate_sync(self, prompt: str) -> Optional[str]:
         """Synchronous Gemini call (runs in thread pool)."""
         genai.configure(api_key=self.config.gemini_api_key)
@@ -128,11 +134,6 @@ class NewsEvaluator:
 
     # ── OpenAI-compatible backend ───────────────────────────────────
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        reraise=True,
-    )
     def _openai_generate_sync(self, prompt: str) -> Optional[str]:
         """Synchronous OpenAI call (runs in thread pool)."""
         client_kwargs: Dict[str, Any] = {"api_key": self.config.openai_api_key}
@@ -158,7 +159,7 @@ class NewsEvaluator:
 
     @staticmethod
     def _parse_response(raw: str) -> EvaluationResult:
-        """Parse JSON from the LLM response, tolerating markdown fences."""
+        """Parse JSON from the LLM response. Raises exception on failure so tenacity retries."""
         cleaned = raw.strip()
         # Strip ```json ... ``` wrappers
         if cleaned.startswith("```"):
@@ -167,14 +168,13 @@ class NewsEvaluator:
             cleaned = cleaned.rsplit("```", 1)[0]
         cleaned = cleaned.strip()
 
-        try:
-            data = json.loads(cleaned)
-            return EvaluationResult(
-                clickbait_score=int(data.get("clickbait_score", 100)),
-                factuality_score=int(data.get("factuality_score", 0)),
-                is_approved=bool(data.get("is_approved", False)),
-                raw_response=raw,
-            )
-        except (json.JSONDecodeError, ValueError, KeyError) as e:
-            logger.error("Could not parse Judge response: %s | raw=%s", e, raw[:200])
-            return EvaluationResult(raw_response=raw)
+        # Will raise json.JSONDecodeError if invalid, letting tenacity retry the LLM call
+        data = json.loads(cleaned)
+        
+        # Verify schema implicitly by fetching keys (will raise ValueError/TypeError if malformed)
+        return EvaluationResult(
+            clickbait_score=int(data.get("clickbait_score", 100)),
+            factuality_score=int(data.get("factuality_score", 0)),
+            is_approved=bool(data.get("is_approved", False)),
+            raw_response=raw,
+        )

@@ -77,11 +77,16 @@ async def check_semantic_duplicate(
     threshold = config.dedup_similarity_threshold  # default 0.85
 
     # --- Stage 1: fast token overlap ---
+    # Only keep titles with similarity > 0.35 to send to LLM
+    candidates = []
     max_sim = 0.0
+    
     for t in recent_titles:
         sim = jaccard_similarity(new_title, t)
         if sim > max_sim:
             max_sim = sim
+        if sim >= 0.35:
+            candidates.append((t, sim))
 
     if max_sim >= 0.90:
         logger.info(
@@ -89,12 +94,20 @@ async def check_semantic_duplicate(
         )
         return True
 
-    if max_sim < 0.35:
-        # Clearly different — no need to ask LLM
+    if not candidates:
+        # None of the recent titles are even remotely similar
         return False
 
     # --- Stage 2: LLM verification for borderline titles ---
-    titles_block = "\n".join(f"{i}. {t}" for i, t in enumerate(recent_titles, 1))
+    # Only send the candidate titles, sorting by highest similarity first
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    titles_block = "\n".join(f"{i}. {t}" for i, (t, sim) in enumerate(candidates, 1))
+    
+    logger.debug(
+        "Semantic filter: Escaping %d/%d titles to LLM (max sim: %.2f)",
+        len(candidates), len(recent_titles), max_sim
+    )
+    
     prompt = _DEDUP_PROMPT.format(new_title=new_title, titles_block=titles_block)
 
     try:

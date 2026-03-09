@@ -14,6 +14,7 @@ from typing import Any, Mapping, Optional, Protocol, Sequence
 from urllib.parse import urljoin
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 logger = logging.getLogger("NewsBot.ImageExtractor")
 
@@ -99,6 +100,25 @@ class ArticleMetadataImageStrategy:
 
         return None
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError, httpx.TimeoutException)),
+        reraise=True,
+    )
+    async def _fetch_html_with_retry(self, context: ImageLookupContext, client: httpx.AsyncClient) -> httpx.Response:
+        """Fetch HTML with explicit retry rules for transit and status errors."""
+        response = await client.get(
+            context.article_url,
+            headers={"Range": "bytes=0-50000"},
+        )
+        
+        # We explicitly want to retry on 403 (Cloudflare challenge often transient or rotates IP/headers), 502, 503, 504
+        if response.status_code in (403, 502, 503, 504):
+            response.raise_for_status() # this will throw HTTPStatusError and trigger tenacity retry
+            
+        return response
+
     async def _load_article_html(
         self,
         context: ImageLookupContext,
@@ -108,11 +128,10 @@ class ArticleMetadataImageStrategy:
             return context.html or None
 
         try:
-            response = await client.get(
-                context.article_url,
-                headers={"Range": "bytes=0-50000"},
-            )
+            response = await self._fetch_html_with_retry(context, client)
+            # Raise for any other 4xx/5xx that wasn't retried
             response.raise_for_status()
+
         except httpx.HTTPStatusError as exc:
             logger.warning(
                 "HTTP error %s while loading image candidates: %s",
@@ -163,10 +182,18 @@ class ImageExtractor:
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0.0.0 Safari/537.36"
+            "Chrome/123.0.0.0 Safari/537.36"
         ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.5",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,ru;q=0.8",
+        "Sec-Ch-Ua": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1"
     }
 
     def __init__(
